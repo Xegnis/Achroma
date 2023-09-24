@@ -5,6 +5,10 @@
 
 #include <vk_types.h>
 #include <vector>
+#include "vk_deletion_queue.h"
+#include "vk_mesh.h"
+
+constexpr unsigned int FRAME_OVERLAP = 2;
 
 class VulkanEngine {
 public:
@@ -36,17 +40,55 @@ public:
 	//family of that queue
 	uint32_t _graphicsQueueFamily;
 
-	//the command pool for our commands
-	VkCommandPool _commandPool;
-	//the buffer we will record into
-	VkCommandBuffer _mainCommandBuffer;
-
 	VkRenderPass _renderPass;
 	std::vector<VkFramebuffer> _frameBuffers;
-	
-	//for synchronization
-	VkSemaphore _presentSemaphore, _renderSemaphore;
-	VkFence _renderFence;
+
+	VkPipelineLayout _trianglePipelineLayout;
+	VkPipeline _trianglePipeline;
+	VkPipeline _redTrianglePipeline;
+
+	int _selectedShader{ 0 };
+
+	DeletionQueue _mainDeletionQueue;
+
+	//vma lib allocator
+	VmaAllocator _allocator;
+
+	VkPipeline _meshPipeline;
+	Mesh _triangleMesh;
+
+	VkPipelineLayout _meshPipelineLayout;
+
+	Mesh _monkeyMesh;
+
+	VkImageView _depthImageView;
+	AllocatedImage _depthImage;
+	VkFormat _depthFormat;
+
+	//default array of renderable objects
+	std::vector<RenderObject> _renderables;
+
+	std::unordered_map<std::string, Material> _materials;
+	std::unordered_map<std::string, Mesh> _meshes;
+
+	//frame storage
+	FrameData _frames[FRAME_OVERLAP];
+
+	VkDescriptorSetLayout _globalSetLayout;
+	VkDescriptorPool _descriptorPool;
+	VkDescriptorSetLayout _objectSetLayout;
+
+	VkPhysicalDeviceProperties _gpuProperties;
+
+	GPUSceneData _sceneParameters;
+	AllocatedBuffer _sceneParameterBuffer;
+
+	UploadContext _uploadContext;
+
+	//texture hashmap
+	std::unordered_map<std::string, Texture> _loadedTextures;
+
+	VkDescriptorSetLayout _singleTextureSetLayout;
 
 	//initializes everything in the engine
 	void init();
@@ -60,6 +102,29 @@ public:
 	//run main loop
 	void run();
 
+	//create material and add it to the map
+	Material* create_material(VkPipeline pipeline, VkPipelineLayout layout, const std::string& name);
+
+	//returns nullptr if it can't be found
+	Material* get_material(const std::string& name);
+
+	//returns nullptr if it can't be found
+	Mesh* get_mesh(const std::string& name);
+
+	//our draw function
+	void draw_objects(VkCommandBuffer cmd, RenderObject* first, int count);
+
+	//getter for the frame we are rendering to right now.
+	FrameData& get_current_frame();
+
+	AllocatedBuffer create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+
+	size_t pad_uniform_buffer_size(size_t originalSize);
+
+	void immediate_submit(std::function<void(VkCommandBuffer cmd)>&& function);
+
+	void load_images();
+
 private:
 	void init_vulkan();
 
@@ -72,4 +137,17 @@ private:
 	void init_framebuffers();
 
 	void init_sync_structures();
+
+	//load a shader module from a .spv file, returns false if it errors
+	bool load_shader_module(const char* filePath, VkShaderModule* outShaderModule);
+
+	void init_pipeline();
+
+	void load_meshes();
+
+	void upload_mesh(Mesh& mesh);
+
+	void init_scene();
+
+	void init_descriptors();
 };
